@@ -24,7 +24,7 @@ import scala.language.higherKinds
  * A `Flow` is a set of stream processing steps that has one open input and one open output.
  */
 final class Flow[-In, +Out, +Mat](private[stream] override val module: Module)
-  extends FlowOps[Out, Mat] with Graph[FlowShape[In, Out], Mat] {
+    extends FlowOps[Out, Mat] with Graph[FlowShape[In, Out], Mat] {
 
   override val shape: FlowShape[In, Out] = module.shape.asInstanceOf[FlowShape[In, Out]]
 
@@ -329,6 +329,8 @@ final case class RunnableGraph[+Mat](private[stream] val module: StreamLayout.Mo
 trait FlowOps[+Out, +Mat] {
   import akka.stream.impl.Stages._
   type Repr[+O, +M] <: FlowOps[O, M]
+  type Flattened[U] <: Repr[U, Mat]
+  type Closed <: Graph[_, Mat]
 
   /**
    * Transform this [[Flow]] by appending the given processing steps.
@@ -915,8 +917,10 @@ trait FlowOps[+Out, +Mat] {
    * '''Cancels when''' downstream cancels and all substreams cancel
    *
    */
-  def groupBy[K, U >: Out](f: Out ⇒ K): Repr[(K, Source[U, Unit]), Mat] =
-    deprecatedAndThen(GroupBy(f.asInstanceOf[Any ⇒ Any]))
+  def groupBy[K](f: Out ⇒ K): SubFlow[Out, Mat] {
+    type Flattened[U] = FlowOps.this.Flattened[U]
+    type Closed = FlowOps.this.Closed
+  }
 
   /**
    * This operation applies the given predicate to all incoming elements and
@@ -958,8 +962,10 @@ trait FlowOps[+Out, +Mat] {
    * '''Cancels when''' downstream cancels and substreams cancel
    *
    */
-  def splitWhen[U >: Out](p: Out ⇒ Boolean): Repr[Source[U, Unit], Mat] =
-    deprecatedAndThen(Split.when(p.asInstanceOf[Any ⇒ Boolean]))
+  def splitWhen(p: Out ⇒ Boolean): SubFlow[Out, Mat] {
+    type Flattened[U] = FlowOps.this.Flattened[U]
+    type Closed = FlowOps.this.Closed
+  }
 
   /**
    * This operation applies the given predicate to all incoming elements and
@@ -993,8 +999,10 @@ trait FlowOps[+Out, +Mat] {
    *
    * See also [[FlowOps.splitAfter]].
    */
-  def splitAfter[U >: Out](p: Out ⇒ Boolean): Repr[Source[U, Unit], Mat] =
-    deprecatedAndThen(Split.after(p.asInstanceOf[Any ⇒ Boolean]))
+  def splitAfter(p: Out ⇒ Boolean): SubFlow[Out, Mat] {
+    type Flattened[U] = FlowOps.this.Flattened[U]
+    type Closed = FlowOps.this.Closed
+  }
 
   /**
    * Transform each input element into a `Source` of output elements that is
@@ -1283,4 +1291,3 @@ trait FlowOps[+Out, +Mat] {
 
   private[scaladsl] def deprecatedAndThen[U](op: StageModule): Repr[U, Mat]
 }
-
